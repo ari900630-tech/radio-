@@ -17,6 +17,78 @@ const RADIO_MIRRORS = [
   "https://nl1.api.radio-browser.info/json"
 ];
 
+const GENRE_IMAGES: Record<string, string> = {
+  "ישראלי": "1531278520760-405aa30c335e",
+  "ג'אז": "1511671782779-c97d3d27a1d4",
+  "רוק": "1498038432885-c6f3f1b912ee",
+  "פופ": "1514525253344-f81cee3e2dd9",
+  "אלקטרוני": "1470225620780-dba8ba36b745",
+  "ראפ": "1493225255756-042739eba544",
+  "היפ הופ": "1516280440605-ebaa7d2305df",
+  "מטאל": "1511671566508-ea246a741baf",
+  "קלאסי": "1507838596044-ad7115c1b41d",
+  "רטרו": "1459749411177-04028ce104d4",
+  "דאנס": "1535525153412-d021f07f50e2",
+  "רגאיי": "1508700115892-45ecd05a2cba",
+  "מדיטציה": "1506126613408-c796920aa7b2",
+  "חדשות": "1504715101211-f136a4914405",
+  "ספורט": "1461896740118-2816d42e27e2",
+  "ילדים": "1602048900010-09932d0c92ce",
+  "ים תיכוני": "1516280440605-ebaa7d2305df",
+  "דתי": "1519751138012-70f9fd97f26d",
+  "אינדי": "1498114141620-83ea17bcc610",
+  "פסקול": "1485848395967-aeda365317fb",
+  "דיסקו": "1533171638242-201503c4f9cf",
+  "יוונית": "1503224505310-7f9959b71e1a",
+  "ערבית": "1512467847644-4007df358b8d",
+  "חסידית": "1501612722244-42b78473ef9c",
+  "אופרה": "1516450360452-46c53f3f1e9c",
+  "קומדיה": "1517232111-2053647000e3",
+  "פודקאסט": "1477068815518-df1c5ad0a90d",
+  "טבע": "144197423153b-0e59eeaa0ae3",
+  "כלכלה": "1611974717539-0bd5c1d9df6c",
+  "שירי ארץ ישראל": "1516065561002-dba8bad7c6e0",
+  "טכנו": "1605722243979-fe0be8158c31",
+  "האוס": "1601614002621-399fb1253457",
+  "טראנס": "1492619227582-7f3b20202d2d",
+  "מזרחית": "1516280440605-ebaa7d2305df",
+  "צ'ילהאאוט": "1490248122-ec968f9a69cc",
+  "בלוז": "1514749065961-042079632734",
+  "ניינטיז": "1451000305-6a84f3ccb2b8",
+  "אייטיז": "1459749411177-04028ce104d4",
+  "פאנק": "1514660312-3f18e9772a08",
+  "סול": "1514749065961-042079632734",
+  "פסייטרנס": "1514466906236-4074f764c2ec",
+  "חלופית": "1498114141620-83ea17bcc610",
+  "לו-פיי": "1526218626217-09c5b56294c1",
+  "צ'יל": "1490248122-ec968f9a69cc",
+  "אווירה": "144197423153b-0e59eeaa0ae3",
+  "מחזות זמר": "1516450360452-46c53f3f1e9c",
+  "חדשות עולם": "1504715101211-f136a4914405",
+  "קאנטרי": "1534065608827-024e03027f3b",
+  "סינת'פופ": "1550483034-7db30155b274",
+  "דיפ האוס": "1601614002621-399fb1253457",
+  "רוחנית": "1506126613408-c796920aa7b2"
+};
+
+const getGenreGradient = (name: string) => {
+  const colors = [
+    'from-pink-500/20 to-purple-500/20',
+    'from-blue-500/20 to-cyan-500/20',
+    'from-emerald-500/20 to-teal-500/20',
+    'from-orange-500/20 to-yellow-500/20',
+    'from-red-500/20 to-pink-500/20',
+    'from-indigo-500/20 to-blue-500/20',
+    'from-rose-500/20 to-orange-500/20',
+    'from-amber-500/20 to-yellow-500/20'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 const API_BASE = "/api/proxy";
 
 const COUNTRY_TRANSLATIONS: Record<string, string> = {
@@ -570,6 +642,7 @@ export default function App() {
   const [volume, setVolume] = useState(0.8);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewType>("popular");
+  const [previousView, setPreviousView] = useState<ViewType>("countries");
   const [searchQuery, setSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
@@ -589,6 +662,25 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+
+  // Fullscreen state listener
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+    };
+  }, []);
 
   // Check backend health
   useEffect(() => {
@@ -789,15 +881,33 @@ export default function App() {
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
-      });
-      setIsFullscreen(true);
+      const elem = document.documentElement as any;
+      const requestFullscreen = 
+        elem.requestFullscreen || 
+        elem.webkitRequestFullscreen || 
+        elem.mozRequestFullScreen || 
+        elem.msRequestFullscreen;
+
+      if (requestFullscreen) {
+        requestFullscreen.call(elem).catch((err: any) => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+          showNotification("הצגת מסך מלא לא נתמכת בדפדפן זה", "error");
+        });
+      } else {
+        showNotification("הצגת מסך מלא לא נתמכת בדפדפן זה", "error");
+      }
     } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
+      const exitFullscreen = 
+        document.exitFullscreen || 
+        (document as any).webkitExitFullscreen || 
+        (document as any).mozCancelFullScreen || 
+        (document as any).msExitFullscreen;
+
+      if (exitFullscreen) {
+        exitFullscreen.call(document);
+      }
     }
-  }, []);
+  }, [showNotification]);
 
   const playStation = useCallback(async (station: RadioStation, retryCount = 0) => {
     setCurrentStation(station);
@@ -956,7 +1066,7 @@ export default function App() {
   }, [allGenres, tagSearchQuery]);
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col">
+    <div dir="rtl" className="h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col relative">
         <AnimatePresence>
           {isOffline && (
             <motion.div 
@@ -1043,7 +1153,7 @@ export default function App() {
                 </h2>
                 <div className="flex gap-2">
                   {(view === "stations" || view === "search") ? (
-                  <button onClick={() => { if (view === "stations") setSelectedCountry(null); setView("countries"); }} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all text-white/50"><ArrowRight size={20} /></button>
+                  <button onClick={() => { if (view === "stations") setSelectedCountry(null); setView(previousView); }} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all text-white/50"><ArrowRight size={20} /></button>
                 ) : <div />}
                 </div>
               </div>
@@ -1060,10 +1170,10 @@ export default function App() {
                 <AnimatePresence mode="wait">
                   <motion.div 
                     key={view + (selectedCountry || "")} 
-                    initial={{ opacity: 0, y: 10 }} 
-                    animate={{ opacity: 1, y: 0 }} 
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
                   >
                   {view === "genres" ? (
                     <div className="grid grid-cols-3 gap-1 md:gap-4 w-full">
@@ -1089,12 +1199,20 @@ export default function App() {
                             const q = mapping[genre] || genre; 
                             setSearchQuery(""); 
                             setTagSearchQuery("");
+                            setPreviousView("genres");
                             setView("search"); 
                             fetchStations("search", { tag: q.toLowerCase() }); 
                           }} 
-                          className="group relative h-20 bg-white/5 rounded-2xl flex flex-col items-center justify-center p-4 hover:bg-white/10 active:scale-95 border border-white/5"
+                          className={cn(
+                            "group relative h-28 rounded-2xl flex flex-col items-center justify-center p-0 overflow-hidden hover:bg-white/10 active:scale-95 border border-white/5 transition-all bg-gradient-to-br",
+                            getGenreGradient(genre)
+                          )}
                         >
-                          <Music className="w-5 h-5 mb-1 text-white/20 group-hover:text-[#dccba3]" /><span className="text-xs font-bold text-white/60 group-hover:text-white text-center">{genre}</span>
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
+                          <div className="relative z-10 flex flex-col items-center p-2">
+                            <Music className="w-6 h-6 mb-2 text-white/50 group-hover:text-[#dccba3] transition-colors" />
+                            <span className="text-sm font-bold text-white group-hover:text-white text-center drop-shadow-md">{genre}</span>
+                          </div>
                         </motion.button>
                       ))}
                     </div>
@@ -1103,7 +1221,13 @@ export default function App() {
                       {filteredCountries.map((country) => (
                         <motion.button 
                           key={country.iso_3166_1} 
-                          onClick={() => { setSelectedCountry(country.name); setView("stations"); fetchStations("stations", { country: country.name }); setCountrySearchQuery(""); }} 
+                          onClick={() => { 
+                            setSelectedCountry(country.name); 
+                            setPreviousView("countries");
+                            setView("stations"); 
+                            fetchStations("stations", { country: country.name }); 
+                            setCountrySearchQuery(""); 
+                          }} 
                           className="group relative h-24 bg-[#162a22]/40 border border-white/5 hover:border-[#dccba3]/50 rounded-2xl flex flex-col items-center justify-center p-3 hover:bg-[#162a22]/60 active:scale-95"
                         >
                           <div className="relative mb-2 w-10 h-10 overflow-hidden rounded-lg border border-white/10 group-hover:border-[#dccba3]/50 transition-all"><img src={`https://flagcdn.com/w80/${country.iso_3166_1.toLowerCase()}.png`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" loading="lazy" referrerPolicy="no-referrer" /></div>
