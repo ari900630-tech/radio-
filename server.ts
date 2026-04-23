@@ -6,6 +6,14 @@ import axios from "axios";
 import http from "http";
 import https from "https";
 
+// Force disable any environment proxies that might interfere
+delete process.env.http_proxy;
+delete process.env.HTTP_PROXY;
+delete process.env.https_proxy;
+delete process.env.HTTPS_PROXY;
+delete process.env.ALL_PROXY;
+delete process.env.all_proxy;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -31,12 +39,13 @@ async function startServer() {
         
         const response = await axios.get(targetUrl, { 
           params: req.query,
-          timeout: 8000,
+          timeout: 10000,
           headers: {
             'User-Agent': 'CyberRadioGlobal/1.0 (ari900630@gmail.com)'
           },
-          httpAgent: new http.Agent({ insecureHTTPParser: true }),
-          httpsAgent: new https.Agent({ insecureHTTPParser: true })
+          httpAgent: new http.Agent({ insecureHTTPParser: true, keepAlive: true } as any),
+          httpsAgent: new https.Agent({ insecureHTTPParser: true, keepAlive: true, rejectUnauthorized: false } as any),
+          proxy: false
         });
         
         return res.json(response.data);
@@ -79,12 +88,15 @@ async function startServer() {
       return axios({
         method: 'get',
         url,
+        params: req.query, // Pass any additional params if present
         responseType: 'stream',
-        timeout: 25000,
+        timeout: 30000,
         headers,
-        validateStatus: (status) => status >= 200 && status < 300,
-        httpAgent: new http.Agent({ insecureHTTPParser: true }),
-        httpsAgent: new https.Agent({ insecureHTTPParser: true })
+        maxRedirects: 5,
+        validateStatus: (status) => status >= 200 && status < 400,
+        httpAgent: new http.Agent({ insecureHTTPParser: true, keepAlive: true } as any),
+        httpsAgent: new https.Agent({ insecureHTTPParser: true, keepAlive: true, rejectUnauthorized: false } as any),
+        proxy: false
       });
     };
 

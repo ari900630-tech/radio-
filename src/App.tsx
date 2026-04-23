@@ -11,7 +11,7 @@ import Hls from "hls.js";
 import { cn } from "./lib/utils";
 import { RadioStation, ViewType, Country } from "./types";
 
-const API_BASE = "https://all.api.radio-browser.info/json";
+const API_BASE = "/api/proxy";
 
 const COUNTRY_TRANSLATIONS: Record<string, string> = {
   "Israel": "ישראל",
@@ -79,7 +79,7 @@ const COUNTRY_TRANSLATIONS: Record<string, string> = {
   "Cyprus": "קפריסין",
   "Morocco": "מרוקו",
   "Tunisia": "תוניסיה",
-  "Algeria": "אלג'יר",
+  "Algeria": "אלג'יריה",
   "Saudi Arabia": "ערב הסעודית",
   "Kingdom of Saudi Arabia": "ערב הסעודית",
   "United Arab Emirates": "איחוד האמירויות",
@@ -133,7 +133,7 @@ const COUNTRY_TRANSLATIONS: Record<string, string> = {
   "Lebanon": "לבנון",
   "Moldova": "מולדובה",
   "Bosnia and Herzegovina": "בוסניה והרצגובינה",
-  "North Macedonia": "מקדוניה הצפונית",
+  "North Macedonia": "צפון מקדוניה",
   "Montenegro": "מונטנגרו",
   "Bolivia": "בוליביה",
   "Guatemala": "גואטמלה",
@@ -235,7 +235,7 @@ const COUNTRY_TRANSLATIONS: Record<string, string> = {
   "French Polynesia": "פולינזיה הצרפתית",
   "New Caledonia": "קלדוניה החדשה",
   "Reunion": "ראוניון",
-  "French Guiana": "גיאנה הצרפתית",
+  "French Guiana": "גיינה הצרפתית",
   "Mayotte": "מיוט",
   "Macao": "מקאו",
   "Faroe Islands": "איי פארו",
@@ -268,7 +268,217 @@ const COUNTRY_TRANSLATIONS: Record<string, string> = {
   "Turks and Caicos Islands": "איי טרקס וקייקוס",
   "Saba": "סאבא",
   "Sint Eustatius": "סנט אוסטטיוס",
-  "Lesotho": "לסוטו"
+  "Lesotho": "לסוטו",
+  "Eswatini": "אסוואטיני",
+  "Swaziland": "סוואזילנד",
+  "Sao Tome and Principe": "סאו טומה ופרינסיפה",
+  "Western Sahara": "סהרה המערבית",
+  "Saint Pierre and Miquelon": "סן-פייר ומיקלון",
+  "Falkland Islands": "איי פוקלנד",
+  "South Georgia and the South Sandwich Islands": "איי ג'ורג'יה הדרומית ואיי סנדוויץ' הדרומיים",
+  "Heard Island and McDonald Islands": "האי הרד ואיי מקדונלד",
+  "British Indian Ocean Territory": "הטריטוריה הבריטית באוקיינוס ההודי",
+  "Christmas Island": "אי חג המולד",
+  "Cocos (Keeling) Islands": "איי קוקוס",
+  "Norfolk Island": "האי נורפוק",
+  "Pitcairn": "פיטקרן",
+  "Saint Helena": "סנט הלנה",
+  "Antarctica": "אנטארקטיקה",
+  "Belarus": "בלארוס",
+  "Republic of Belarus": "בלארוס",
+  "Brunei Darussalam": "ברוניי",
+  "Congo, Democratic Republic of": "קונגו הדמוקרטית",
+  "Congo, Republic of": "קונגו",
+  "Cote d'Ivoire": "חוף השנהב",
+  "Holy See (Vatican City State)": "ותיקן",
+  "Iran, Islamic Republic of": "איראן",
+  "Korea, Democratic People's Republic of": "צפון קוריאה",
+  "Lao People's Democratic Republic": "לאוס",
+  "Libyan Arab Jamahiriya": "לוב",
+  "Micronesia, Federated States of": "מיקרונזיה",
+  "Moldova, Republic of": "מולדובה",
+  "Palestine, State of": "פלסטין",
+  "Svalbard and Jan Mayen": "סבאלברד ויאן מאיין",
+  "Syrian Arab Republic": "סוריה",
+  "Tanzania, United Republic of": "טנזניה",
+  "Venezuela, Bolivarian Republic of": "ונצואלה",
+  "U.S. Virgin Islands": "איי הבתולה של ארצות הברית",
+  "Saint Barthélemy": "סן ברתלמי",
+  "Saint-Barthélemy": "סן ברתלמי",
+  "St. Barts": "סן ברתלמי",
+  "Sint Maarten (Dutch part)": "סן מרטן",
+  "Saint Martin (French part)": "סן מרטן",
+  "The United Kingdom of Great Britain and Northern Ireland": "בריטניה",
+  "Saint Vincent and The Grenadines": "סנט וינסנט והגרנדינים",
+  "The Republic of Yemen": "תימן",
+  "The Sultanate of Oman": "עומאן",
+  "The Republic of Iraq": "עיראק",
+  "Kingdom of Morocco": "מרוקו",
+  "State of Kuwait": "כווית",
+  "Hashemite Kingdom of Jordan": "ירדן",
+  "Republic of Lebanon": "לבנון",
+  "The Arabic Republic of Egypt": "מצרים",
+  "The French Republic": "צרפת",
+  "The Italian Republic": "איטליה",
+  "The Swiss Confederation": "שוויץ",
+  "The Portuguese Republic": "פורטוגל",
+  "The Hellenic Republic": "יוון",
+  "The Kingdom of Spain": "ספרד",
+  "The Kingdom of Norway": "נורווגיה",
+  "The Kingdom of Sweden": "שוודיה",
+  "The Kingdom of Belgium": "בלגיה",
+  "The Grand Duchy of Luxembourg": "לוקסמבורג",
+  "Bonaire, Sint Eustatius and Saba": "בונייר, סנט אוסטטיוס וסאבא",
+  "St. Barthelemy": "סן ברתלמי",
+  "St. Martin": "סן מרטן",
+  "Wallis & Futuna": "ואליס ופוטונה",
+  "Turks & Caicos": "איי טרקס וקייקוס",
+  "The Vatican City State": "ותיקן",
+  "Réunion": "ראוניון",
+  "The Republic of Korea": "דרום קוריאה",
+  "The People's Republic of China": "סין",
+  "The Republic of India": "הודו",
+  "The Federative Republic of Brazil": "ברזיל",
+  "The United Mexican States": "מקסיקו",
+  "The Republic of Indonesia": "אינדונזיה",
+  "The Islamic Republic of Pakistan": "פקיסטן",
+  "The Federal Republic of Nigeria": "ניגריה",
+  "The People's Republic of Bangladesh": "בנגלדש",
+  "The Federal Republic of Ethiopia": "אתיופיה",
+  "The Republic of the Philippines": "פיליפינים",
+  "The Arab Republic of Egypt": "מצרים",
+  "The Socialist Republic of Viet Nam": "וייטנאם",
+  "The Republic of Turkey": "טורקיה",
+  "The Federal Republic of Germany": "גרמניה",
+  "The Kingdom of Thailand": "תאילנד",
+  "The United Republic of Tanzania": "טנזניה",
+  "The Republic of South Africa": "דרום אפריקה",
+  "The Republic of Kenya": "קניה",
+  "The Republic of Colombia": "קולומביה",
+  "The Republic of Algeria": "אלג'יריה",
+  "The Republic of Peru": "פרו",
+  "The Republic of Uzbekistan": "אוזבקיסטן",
+  "The Federation of Malaysia": "מלזיה",
+  "The Republic of Ghana": "גאנה",
+  "The Republic of Mozambique": "מוזמביק",
+  "The Republic of Madagascar": "מדגסקר",
+  "The Republic of Cameroon": "קמרון",
+  "The Republic of Cote d'Ivoire": "חוף השנהב",
+  "The Republic of Niger": "ניז'ר",
+  "The Republic of Malawi": "מלאווי",
+  "The Republic of Zambia": "זמביה",
+  "The Republic of Mali": "מאלי",
+  "The Republic of Sri Lanka": "סרי לנקה",
+  "The Republic of Kazakhstan": "קזחסטן",
+  "The Republic of Chile": "צ'ילה",
+  "The Republic of Romania": "רומניה",
+  "The Republic of Guatemala": "גואטמלה",
+  "The Republic of Chad": "צ'אד",
+  "The Republic of Senegal": "סנגל",
+  "The Kingdom of Cambodia": "קמבודיה",
+  "The Republic of Zimbabwe": "זימבבואה",
+  "The Republic of Guinea": "גינאה",
+  "The Republic of Rwanda": "רואנדה",
+  "The Republic of Benin": "בנין",
+  "The Republic of Burundi": "בורונדי",
+  "The Republic of Tunisia": "תוניסיה",
+  "The Republic of South Sudan": "דרום סודן",
+  "The Republic of Honduras": "הונדורס",
+  "The Republic of El Salvador": "אל סלוודור",
+  "The Independent State of Papua New Guinea": "פפואה גינאה החדשה",
+  "The Republic of Austria": "אוסטריה",
+  "The Republic of Tajikistan": "טג'יקיסטן",
+  "The Kingdom of Denmark": "דנמרק",
+  "The Republic of Finland": "פינלנד",
+  "The Slovak Republic": "סלובקיה",
+  "The Republic of Bulgaria": "בולגריה",
+  "The Republic of Paraguay": "פרגוואי",
+  "The Republic of Laos": "לאוס",
+  "The Republic of Nicaragua": "ניקרגואה",
+  "The Kyrgyz Republic": "קירגיזסטן",
+  "The Republic of Turkmenistan": "טורקמניסטן",
+  "The Republic of Singapore": "סינגפור",
+  "The State of Eritrea": "אריתריאה",
+  "The Republic of the Congo": "קונגו",
+  "The Republic of Togo": "טוגו",
+  "The Republic of Sierra Leone": "סיירה לאון",
+  "The State of Libya": "לוב",
+  "The Republic of Costa Rica": "קוסטה ריקה",
+  "The Republic of Liberia": "ליבריה",
+  "The State of Palestine": "פלסטין",
+  "The Republic of Croatia": "קרואטיה",
+  "The Republic of Georgia": "גיאורגיה",
+  "The Republic of Armenia": "ארמניה",
+  "The Republic of Moldova": "מולדובה",
+  "The Republic of Panama": "פנמה",
+  "The Republic of Ireland": "אירלנד",
+  "The Oriental Republic of Uruguay": "אורוגוואי",
+  "The Republic of Lithuania": "ליטא",
+  "The Republic of Albania": "אלבניה",
+  "The Republic of Mongolia": "מונגוליה",
+  "The State of Qatar": "קטאר",
+  "The Republic of Slovenia": "סלובניה",
+  "The Republic of Cyprus": "קפריסין",
+  "The Republic of Estonia": "אסטוניה",
+  "The Republic of Fiji": "פיג'י",
+  "The Republic of Guyana": "גיאנה",
+  "The Republic of Djibouti": "ג'יבוטי",
+  "The Union of the Comoros": "קומורו",
+  "The Kingdom of Bhutan": "בהוטן",
+  "The Republic of Montenegro": "מונטנגרו",
+  "The Republic of Suriname": "סורינאם",
+  "The Republic of Cape Verde": "כף ורדה",
+  "The Republic of Malta": "מלטה",
+  "The Republic of Maldives": "האיים המלדיביים",
+  "The Republic of Iceland": "איסלנד",
+  "The Republic of Vanuatu": "ונואטו",
+  "The Republic of Seychelles": "סיישל",
+  "The Principality of Monaco": "מונאקו",
+  "The Principality of Liechtenstein": "ליכטנשטיין",
+  "The Republic of San Marino": "סן מרינו",
+  "The State of the Vatican City": "ותיקן",
+  "The Republic of Botswana": "בוטסואנה",
+  "The Republic of Namibia": "נמיביה",
+  "The Republic of Angola": "אנגולה",
+  "The Gabonese Republic": "גבון",
+  "The Republic of the Gambia": "גמביה",
+  "The Republic of Guinea-Bissau": "גינאה ביסאו",
+  "The Republic of Mauritius": "מאוריציוס",
+  "The Republic of Nauru": "נאורו",
+  "The State of Samoa": "סמואה",
+  "The Kingdom of Tonga": "טונגה",
+  "The Republic of Trinidad and Tobago": "טרינידד וטובגו",
+  "The Republic of Cabo Verde": "כף ורדה",
+  "The Kingdom of the Netherlands": "הולנד",
+  "The People's Democratic Republic of Algeria": "אלג'יריה",
+  "The Republic of Equatorial Guinea": "גינאה המשוונית",
+  "The Sahrawi Arab Democratic Republic": "סהרה המערבית",
+  "The Republic of the Marshall Islands": "איי מרשל",
+  "The Republic of Palau": "פלאו",
+  "The Federated States of Micronesia": "מיקרונזיה",
+  "The Independent State of Samoa": "סמואה",
+  "The Republic of Kiribati": "קיריבטי",
+  "The Solomon Islands": "איי שלמה",
+  "Türkiye": "טורקיה",
+  "Taiwan, Republic Of China": "טייוואן",
+  "Bolivarian Republic Of Venezuela": "ונצואלה",
+  "Republic Of North Macedonia": "צפון מקדוניה",
+  "Islamic Republic Of Iran": "איראן",
+  "The United States Minor Outlying Islands": "איי המינור המרוחקים של ארה\"ב",
+  "The Democratic Peoples Republic Of Korea": "צפון קוריאה",
+  "US Virgin Islands": "איי הבתולה של ארה\"ב",
+  "Coted Ivoire": "חוף השנהב",
+  "The Falkland Islands Malvinas": "איי פוקלנד",
+  "The Lao Peoples Democratic Republic": "לאוס",
+  "Cabo Verde": "כף ורדה",
+  "Aland Islands": "איי אולנד",
+  "Guinea Bissau": "גינאה ביסאו",
+  "Ascension And Tristan Da Cunha Saint Helena": "סנט הלנה",
+  "The French Southern Territories": "הטריטוריות הדרומיות של צרפת",
+  "Bhutan": "בהוטן",
+  "The Cocos Keeling Islands": "איי קוקוס (קילינג)",
+  "Timor Leste": "מזרח טימור",
+  "United States Virgin Islands": "איי הבתולה של ארצות הברית"
 };
 
 // Memoized canonical map for faster translation lookups
@@ -359,6 +569,7 @@ export default function App() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [countrySearchQuery, setCountrySearchQuery] = useState("");
+  const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [useStreamProxy, setUseStreamProxy] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -369,6 +580,15 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll to top when view or selection changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [view, selectedCountry]);
 
   const translateCountry = useCallback((name: string) => {
     if (!name) return "";
@@ -446,11 +666,16 @@ export default function App() {
   const fetchCountries = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/countries`);
-      const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
-      setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
+      if (Array.isArray(response.data)) {
+        const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
+        setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
+      } else {
+        throw new Error("Invalid response format");
+      }
     } catch (error) {
       console.error("Failed to fetch countries", error);
-      showNotification("לא הצלחנו לטעון את רשימת המדינות", "error");
+      // Try a fallback if proxy fails or just show error
+      showNotification("לא הצלחנו לטעון את רשימת המדינות. נסה לרענן.", "error");
     }
   }, [showNotification]);
 
@@ -643,8 +868,23 @@ export default function App() {
     );
   }, [countries, countrySearchQuery, translateCountry]);
 
+  const allGenres = useMemo(() => [
+    "ישראלי", "פופ", "רוק", "אלקטרוני", "טכנו", "האוס", "טראנס", "דאנס", "ראפ", "היפ הופ", 
+    "ג'אז", "בלוז", "מטאל", "לו-פיי", "קלאסי", "צ'ילהאאוט", "רטרו", "אייטיז", "ניינטיז", 
+    "ים תיכוני", "דתי", "חדשות", "ספורט", "רגאיי", "פאנק", "סול", "מדיטציה", "ילדים", "קאנטרי",
+    "אינדי", "חלופית", "פסקול", "סינת'פופ", "דיסקו", "דיפ האוס", "פסייטרנס", "צ'יל", 
+    "אווירה", "שירי ארץ ישראל", "יוונית", "ערבית", "מזרחית", "חסידית", "רוחנית", 
+    "אופרה", "מחזות זמר", "קומדיה", "פודקאסט", "טבע", "חדשות עולם", "כלכלה"
+  ], []);
+
+  const filteredGenres = useMemo(() => {
+    const query = tagSearchQuery.toLowerCase().trim();
+    if (!query) return allGenres;
+    return allGenres.filter(g => g.toLowerCase().includes(query));
+  }, [allGenres, tagSearchQuery]);
+
   return (
-    <div dir="rtl" className="min-h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col">
+    <div dir="rtl" className="h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col">
         <AnimatePresence>
           {isOffline && (
             <motion.div 
@@ -679,36 +919,64 @@ export default function App() {
         <div className="absolute top-0 left-0 w-full h-full opacity-[0.05]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 50 Q30 10 50 50 T90 50' stroke='%23e3d5b8' fill='none' stroke-width='0.5'/%3E%3C/svg%3E")`, backgroundSize: '300px' }} />
       </div>
 
-      <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/80 backdrop-blur-xl z-40 sticky top-0 transition-all">
-        <div className="flex items-center gap-3">
+      <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/95 backdrop-blur-xl z-[60] fixed top-0 left-0 right-0 transition-all">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="text-right"><h1 className="text-xl font-bold tracking-tight text-[#e3d5b8] uppercase italic">רדיו<span className="text-[#dccba3]">פריים</span></h1></div>
-          <div className="w-10 h-10 flex items-center justify-center bg-gradient-to-br from-[#dccba3] to-[#b3a478] rounded-xl shadow-[0_0_15px_rgba(220,203,163,0.3)]"><Radio className="text-[#12241d] w-5 h-5" /></div>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex-1 max-w-sm mx-4 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#dccba3]/40" size={18} />
+          <input 
+            type="text" 
+            placeholder={view === "countries" ? "חפש מדינה..." : view === "genres" ? "חפש קטגוריה..." : "חפש תחנה..."}
+            value={view === "countries" ? countrySearchQuery : view === "genres" ? tagSearchQuery : searchQuery}
+            onChange={(e) => {
+              const q = e.target.value;
+              if (view === "countries") {
+                setCountrySearchQuery(q);
+              } else if (view === "genres") {
+                setTagSearchQuery(q);
+              } else {
+                setSearchQuery(q);
+                if (q.trim().length > 0) {
+                  setView("search");
+                  fetchStations("search");
+                } else if (view === "search") {
+                  setView("popular");
+                  fetchStations("popular");
+                }
+              }
+            }}
+            className="w-full bg-white/10 border border-white/20 rounded-xl py-2 pl-10 pr-4 text-sm text-white placeholder:text-white/40 focus:outline-none focus:border-[#dccba3]/60 focus:bg-white/15 transition-all"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0">
           <button onClick={toggleFullscreen} className="p-2 hover:bg-white/5 rounded-full transition-all text-[#e3d5b8]/40 hover:text-white">{isFullscreen ? <Minimize size={20} /> : <Expand size={20} />}</button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden relative">
-        <main className="flex-1 overflow-y-auto py-4 md:py-10 custom-scrollbar relative px-0">
+      <div className="flex flex-1 overflow-hidden relative pt-16">
+        <main ref={scrollRef} className="flex-1 overflow-y-auto py-4 md:py-10 custom-scrollbar relative px-0">
           <div className="w-full space-y-8 md:space-y-12 pb-36">
             <section>
               <div className="flex items-center justify-between mb-8 px-4 md:px-10">
-                {(view === "stations" || view === "search") ? (
+                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#e3d5b8] flex items-center gap-4">
+                  <div className="w-1.5 h-10 bg-gradient-to-b from-[#dccba3] to-[#b3a478] rounded-full shadow-[0_0_15px_rgba(220,203,163,0.3)]" />
+                  {view === "favorites" ? "הפלייליסט שלי" : view === "countries" ? "מפה עולמית" : view === "genres" ? "קטגוריות" : (selectedCountry && view === "stations") ? `רדיו ${translateCountry(selectedCountry)}` : "תוצאות חיפוש"}
+                  <span className="text-sm font-medium text-[#dccba3]/40 mr-2">
+                    {view === "countries" ? `(${countries.length})` : view === "genres" ? `(${allGenres.length})` : 
+                     view === "favorites" ? `(${favorites.length})` : `(${stations.length})`}
+                  </span>
+                </h2>
+                <div className="flex gap-2">
+                  {(view === "stations" || view === "search") ? (
                   <button onClick={() => { if (view === "stations") setSelectedCountry(null); setView("countries"); }} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all text-white/50"><ArrowRight size={20} /></button>
                 ) : <div />}
-                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#e3d5b8] flex items-center gap-4">
-                  {view === "favorites" ? "הפלייליסט שלי" : view === "countries" ? "מפה עולמית" : view === "genres" ? "קטגוריות" : (selectedCountry && view === "stations") ? `רדיו ${translateCountry(selectedCountry)}` : "תוצאות חיפוש"}
-                  <div className="w-1.5 h-10 bg-gradient-to-b from-[#dccba3] to-[#b3a478] rounded-full shadow-[0_0_15px_rgba(220,203,163,0.3)]" />
-                </h2>
+                </div>
               </div>
 
-              {view === "countries" && (
-                <div className="relative mb-8 max-w-2xl mx-auto px-4 md:px-10">
-                  <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-[#dccba3]/40" size={20} />
-                  <input type="text" placeholder="חפש מדינה..." value={countrySearchQuery} onChange={(e) => setCountrySearchQuery(e.target.value)} className="w-full bg-[#162a22] border border-[#dccba3]/10 rounded-2xl py-4 pr-12 pl-6 text-white text-lg placeholder:text-white/20 focus:outline-none focus:border-[#dccba3]/40 transition-all shadow-xl" />
-                </div>
-              )}
+              {/* Country search bar removed as requested */}
 
               {loading ? (
                 <div className="grid grid-cols-3 gap-1 md:gap-4 w-full px-4">{[...Array(12)].map((_, i) => (<div key={i} className="aspect-square bg-white/[0.03] rounded-2xl border border-white/5" />))}</div>
@@ -723,10 +991,31 @@ export default function App() {
                   >
                   {view === "genres" ? (
                     <div className="grid grid-cols-3 gap-1 md:gap-4 w-full">
-                      {["ישראלי", "פופ", "רוק", "אלקטרוני", "טכנו", "האוס", "טראנס", "דאנס", "ראפ", "היפ הופ", "ג'אז", "בלוז", "מטאל", "לו-פיי", "קלאסי", "צ'ילהאאוט", "רטרו", "אייטיז", "ניינטיז", "ים תיכוני", "דתי", "חדשות", "ספורט", "רגאיי", "פאנק", "סול", "מדיטציה", "ילדים", "קאנטרי"].map((genre) => (
+                      {filteredGenres.map((genre) => (
                         <motion.button 
                           key={genre} 
-                          onClick={() => { const mapping: any = { "ישראלי": "Israel", "אלקטרוני": "Electronic", "טכנו": "Techno", "ראפ": "Rap", "היפ הופ": "Hip Hop", "ג'אז": "Jazz", "מטאל": "Metal", "לו-פיי": "Lofi", "קלאסי": "Classical", "רוק": "Rock", "פופ": "Pop", "צ'ילהאאוט": "Chillout", "רטרו": "Retro", "דאנס": "Dance", "האוס": "House", "טראנס": "Trance", "קאנטרי": "Country", "בלוז": "Blues", "סול": "Soul", "פאנק": "Funk", "רגאיי": "Reggae", "מדיטציה": "Meditation", "חדשות": "News", "ספורט": "Sport", "ילדים": "Kids", "ים תיכוני": "Mizrahi", "דתי": "Religious", "אייטיז": "80s", "ניינטיז": "90s" }; const q = mapping[genre] || genre; setSearchQuery(""); setView("search"); fetchStations("search", { tag: q.toLowerCase() }); }} 
+                          onClick={() => { 
+                            const mapping: any = { 
+                              "ישראלי": "Israel", "אלקטרוני": "Electronic", "טכנו": "Techno", "ראפ": "Rap", 
+                              "היפ הופ": "Hip Hop", "ג'אז": "Jazz", "מטאל": "Metal", "לו-פיי": "Lofi", 
+                              "קלאסי": "Classical", "רוק": "Rock", "פופ": "Pop", "צ'ילהאאוט": "Chillout", 
+                              "רטרו": "Retro", "דאנס": "Dance", "האוס": "House", "טראנס": "Trance", 
+                              "קאנטרי": "Country", "בלוז": "Blues", "סול": "Soul", "פאנק": "Funk", 
+                              "רגאיי": "Reggae", "מדיטציה": "Meditation", "חדשות": "News", "ספורט": "Sport", 
+                              "ילדים": "Kids", "ים תיכוני": "Mizrahi", "דתי": "Religious", "אייטיז": "80s", 
+                              "ניינטיז": "90s", "אינדי": "Indie", "חלופית": "Alternative", "פסקול": "Soundtrack",
+                              "סינת'פופ": "Synthpop", "דיסקו": "Disco", "דיפ האוס": "Deep House", 
+                              "פסייטרנס": "Psytrance", "צ'יל": "Chill", "אווירה": "Ambient", "יוונית": "Greek",
+                              "ערבית": "Arabic", "מזרחית": "Mizrahi", "חסידית": "Hasidic", "רוחנית": "Spiritual",
+                              "אופרה": "Opera", "מחזות זמר": "Musicals", "קומדיה": "Comedy", "פודקאסט": "Podcast",
+                              "טבע": "Nature", "חדשות עולם": "World News", "כלכלה": "Economy", "שירי ארץ ישראל": "Hebrew"
+                            }; 
+                            const q = mapping[genre] || genre; 
+                            setSearchQuery(""); 
+                            setTagSearchQuery("");
+                            setView("search"); 
+                            fetchStations("search", { tag: q.toLowerCase() }); 
+                          }} 
                           className="group relative h-20 bg-white/5 rounded-2xl flex flex-col items-center justify-center p-4 hover:bg-white/10 active:scale-95 border border-white/5"
                         >
                           <Music className="w-5 h-5 mb-1 text-white/20 group-hover:text-[#dccba3]" /><span className="text-xs font-bold text-white/60 group-hover:text-white text-center">{genre}</span>
@@ -746,6 +1035,24 @@ export default function App() {
                         </motion.button>
                       ))}
                     </div>
+                  ) : stations.length === 0 ? (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-col items-center justify-center py-20 text-center w-full"
+                    >
+                      <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                        {view === "favorites" ? <Heart className="w-10 h-10 text-[#dccba3]/30" /> : <Search className="w-10 h-10 text-[#dccba3]/30" />}
+                      </div>
+                      <h3 className="text-xl font-bold text-white mb-2">
+                        {view === "favorites" ? "אין לכם מועדפים עדיין" : "לא נמצאו תחנות"}
+                      </h3>
+                      <p className="text-[#e3d5b8]/30 max-w-xs mx-auto">
+                        {view === "favorites" 
+                          ? "לחצו על הלב בתחנות שאתם אוהבים כדי שיופיעו כאן בגישה מהירה" 
+                          : "נסו לחפש משהו אחר או לבדוק את החיבור לאינטרנט"}
+                      </p>
+                    </motion.div>
                   ) : (
                     <div className="grid grid-cols-3 gap-1 md:gap-3 lg:gap-6 w-full">
                       {stations.map((station) => (
@@ -825,7 +1132,11 @@ export default function App() {
             )}
           </AnimatePresence>
           <div className="h-16 md:h-20 flex items-center justify-center gap-12 md:gap-32 px-8">
-            {[{ id: "countries", icon: Globe, label: "מדינות" }, { id: "favorites", icon: Heart, label: "מועדפים" }, { id: "genres", icon: Music, label: "קטגוריות" }].map((item) => (
+            {[
+              { id: "countries", icon: Globe, label: "מדינות", count: countries.length }, 
+              { id: "favorites", icon: Heart, label: "מועדפים", count: favorites.length }, 
+              { id: "genres", icon: Music, label: "קטגוריות", count: allGenres.length }
+            ].map((item) => (
               <button 
                 key={item.id} 
                 onClick={() => { if (item.id === "countries") setSelectedCountry(null); setView(item.id as any); }} 
@@ -834,7 +1145,10 @@ export default function App() {
                   view === item.id || (item.id === "countries" && view === "stations" && selectedCountry) ? "text-[#dccba3]" : "text-[#e3d5b8]/30 hover:text-white/60"
                 )}
               >
-                <div className="relative"><item.icon size={22} className="md:w-[26px] md:h-[26px]" fill={view === item.id && item.id === "favorites" ? "currentColor" : "none" } />{view === item.id && (<motion.div layoutId="active-nav" className="absolute -inset-2 bg-[#dccba3]/5 rounded-xl -z-10" transition={{ duration: 0.1 }} />)}</div>
+                <div className="relative">
+                  <item.icon size={22} className="md:w-[26px] md:h-[26px]" fill={view === item.id && item.id === "favorites" ? "currentColor" : "none" } />
+                  {view === item.id && (<motion.div layoutId="active-nav" className="absolute -inset-2 bg-[#dccba3]/5 rounded-xl -z-10" transition={{ duration: 0.1 }} />)}
+                </div>
                 <span className="text-[9px] md:text-[10px] font-bold tracking-widest uppercase whitespace-nowrap">{item.label}</span>
               </button>
             ))}
