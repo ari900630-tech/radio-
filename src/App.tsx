@@ -11,6 +11,12 @@ import Hls from "hls.js";
 import { cn } from "./lib/utils";
 import { RadioStation, ViewType, Country } from "./types";
 
+const RADIO_MIRRORS = [
+  "https://de1.api.radio-browser.info/json",
+  "https://at1.api.radio-browser.info/json",
+  "https://nl1.api.radio-browser.info/json"
+];
+
 const API_BASE = "/api/proxy";
 
 const COUNTRY_TRANSLATIONS: Record<string, string> = {
@@ -580,8 +586,23 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+
+  // Check backend health
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const res = await axios.get("/api/health", { timeout: 3000 });
+        setBackendAvailable(res.data.status === "ok");
+      } catch (e) {
+        console.warn("Backend server not detected (e.g. static hosting like Netlify). Using direct mirrors.");
+        setBackendAvailable(false);
+      }
+    };
+    checkBackend();
+  }, []);
 
   // Scroll to top when view or selection changes
   useEffect(() => {
@@ -623,59 +644,107 @@ export default function App() {
       const currentCountry = extraParams.country || selectedCountry;
       const countryToFetch = currentCountry || (type === "countries" ? "Israel" : "");
 
-      let endpoint = `${API_BASE}/stations/topclick/100`;
+      // Base endpoint logic
+      let endpoint = `/stations/topclick/100`;
       let queryParams = { ...extraParams };
       
       if (type === "search" || searchQuery) {
-        endpoint = `${API_BASE}/stations/search`;
+        endpoint = `/stations/search`;
         queryParams = { name: searchQuery, limit: 500, ...extraParams };
       } else if (type === "favorites") {
         setLoading(false);
         return;
       } else if (countryToFetch) {
-        endpoint = `${API_BASE}/stations/bycountry/${countryToFetch}`;
+        endpoint = `/stations/bycountry/${countryToFetch}`;
         queryParams = { order: "clickcount", reverse: "true", limit: 1000, ...extraParams };
       }
 
-      const response = await axios.get(endpoint, { 
-        params: queryParams,
-        signal: abortControllerRef.current.signal 
-      });
-      
-      const uniqueStations = response.data.filter((station: RadioStation, index: number, self: RadioStation[]) =>
-        index === self.findIndex((s) => s.stationuuid === station.stationuuid)
-      );
-      
-      setStations(uniqueStations);
-      if (uniqueStations.length === 0 && (type === "search" || searchQuery)) {
+      // Try local proxy first
+      try {
+        const response = await axios.get(`${API_BASE}${endpoint}`, { 
+          params: queryParams,
+          signal: abortControllerRef.current.signal 
+        });
+        
+        setStations(response.data.filter((station: RadioStation, index: number, self: RadioStation[]) =>
+          index === self.findIndex((s) => s.stationuuid === station.stationuuid)
+        ));
+      } catch (proxyError) {
+        if (axios.isCancel(proxyError)) return;
+        console.warn("Proxy failed, trying direct mirror...");
+        
+        // Fallback to mirrors
+        let success = false;
+        for (const mirror of RADIO_MIRRORS) {
+          try {
+            const response = await axios.get(`${mirror}${endpoint}`, { 
+              params: queryParams,
+              signal: abortControllerRef.current.signal 
+            });
+            setStations(response.data.filter((station: RadioStation, index: number, self: RadioStation[]) =>
+              index === self.findIndex((s) => s.stationuuid === station.stationuuid)
+            ));
+            success = true;
+            break;
+          } catch (mirrorError) {
+            console.error(`Mirror ${mirror} failed`, mirrorError);
+          }
+        }
+        
+        if (!success) throw proxyError;
+      }
+
+      if (stations.length === 0 && (type === "search" || searchQuery)) {
         showNotification("לא נמצאו תחנות תואמות לחיפוש", "info");
       }
     } catch (error) {
       if (axios.isCancel(error)) return;
       console.error("Failed to fetch stations", error);
       if (retryCount < 2) {
-        setTimeout(() => fetchStations(type, extraParams, retryCount + 1), 1000);
+        setTimeout(() => fetchStations(type, extraParams, retryCount + 1), 1500);
       } else {
         showNotification("שגיאה בטעינת תחנות. נסה שוב מאוחר יותר", "error");
       }
     } finally {
-      setLoading(false);
+      // Small artificial delay to smooth out rapid state changes if connection is "too fast"
+      setTimeout(() => setLoading(false), 300);
     }
   }, [selectedCountry, searchQuery, showNotification]);
 
-  const fetchCountries = useCallback(async () => {
+  const fetchCountries = useCallback(async (retryCount = 0) => {
     try {
-      const response = await axios.get(`${API_BASE}/countries`);
-      if (Array.isArray(response.data)) {
-        const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
-        setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
-      } else {
-        throw new Error("Invalid response format");
+      // Try proxy first
+      try {
+        const response = await axios.get(`${API_BASE}/countries`);
+        if (Array.isArray(response.data)) {
+          const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
+          setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
+        } else throw new Error("Invalid response");
+      } catch (proxyError) {
+        console.warn("Proxy countries fetch failed, trying direct mirror...");
+        let success = false;
+        for (const mirror of RADIO_MIRRORS) {
+          try {
+            const response = await axios.get(`${mirror}/countries`);
+            if (Array.isArray(response.data)) {
+              const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
+              setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
+              success = true;
+              break;
+            }
+          } catch (mirrorError) {
+            console.error(`Mirror ${mirror} failed for countries`, mirrorError);
+          }
+        }
+        if (!success) throw proxyError;
       }
     } catch (error) {
       console.error("Failed to fetch countries", error);
-      // Try a fallback if proxy fails or just show error
-      showNotification("לא הצלחנו לטעון את רשימת המדינות. נסה לרענן.", "error");
+      if (retryCount < 2) {
+        setTimeout(() => fetchCountries(retryCount + 1), 2000);
+      } else {
+        showNotification("לא הצלחנו לטעון את רשימת המדינות. נסה לרענן.", "error");
+      }
     }
   }, [showNotification]);
 
@@ -752,9 +821,12 @@ export default function App() {
 
       let streamUrl = station.url_resolved || station.url;
       
-      // Force proxy for http or if it's a retry
-      if (streamUrl.startsWith("http://") || useProxy) {
+      // Force proxy for http or if it's a retry, but ONLY if backend is available
+      if ((streamUrl.startsWith("http://") || useProxy) && backendAvailable !== false) {
         streamUrl = `/api/stream?url=${encodeURIComponent(streamUrl)}`;
+      } else if (streamUrl.startsWith("http://") && location.protocol === "https:") {
+        console.warn("Attempting to load HTTP stream on HTTPS page without proxy. This may fail.");
+        // We still try, some browsers might allow it or users might have relaxed settings
       }
 
       if (station.hls === 1 && Hls.isSupported() && !useProxy) {
@@ -884,7 +956,7 @@ export default function App() {
   }, [allGenres, tagSearchQuery]);
 
   return (
-    <div dir="rtl" className="h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col">
+    <div dir="rtl" className="min-h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col">
         <AnimatePresence>
           {isOffline && (
             <motion.div 
@@ -919,7 +991,7 @@ export default function App() {
         <div className="absolute top-0 left-0 w-full h-full opacity-[0.05]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 50 Q30 10 50 50 T90 50' stroke='%23e3d5b8' fill='none' stroke-width='0.5'/%3E%3C/svg%3E")`, backgroundSize: '300px' }} />
       </div>
 
-      <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/95 backdrop-blur-xl z-[60] fixed top-0 left-0 right-0 transition-all">
+      <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/80 backdrop-blur-xl z-[60] sticky top-0 transition-all">
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-right"><h1 className="text-xl font-bold tracking-tight text-[#e3d5b8] uppercase italic">רדיו<span className="text-[#dccba3]">פריים</span></h1></div>
         </div>
@@ -956,7 +1028,7 @@ export default function App() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden relative pt-16">
+      <div className="flex flex-1 overflow-hidden relative">
         <main ref={scrollRef} className="flex-1 overflow-y-auto py-4 md:py-10 custom-scrollbar relative px-0">
           <div className="w-full space-y-8 md:space-y-12 pb-36">
             <section>
@@ -979,15 +1051,19 @@ export default function App() {
               {/* Country search bar removed as requested */}
 
               {loading ? (
-                <div className="grid grid-cols-3 gap-1 md:gap-4 w-full px-4">{[...Array(12)].map((_, i) => (<div key={i} className="aspect-square bg-white/[0.03] rounded-2xl border border-white/5" />))}</div>
+                <div className="grid grid-cols-3 gap-1 md:gap-4 w-full px-4 md:px-10">
+                  {[...Array(18)].map((_, i) => (
+                    <div key={i} className="aspect-square bg-white/[0.02] rounded-2xl border border-white/5 animate-pulse" />
+                  ))}
+                </div>
               ) : (
                 <AnimatePresence mode="wait">
                   <motion.div 
                     key={view + (selectedCountry || "")} 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.1 }}
+                    initial={{ opacity: 0, y: 10 }} 
+                    animate={{ opacity: 1, y: 0 }} 
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                   >
                   {view === "genres" ? (
                     <div className="grid grid-cols-3 gap-1 md:gap-4 w-full">
