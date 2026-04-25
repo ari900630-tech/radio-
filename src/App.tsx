@@ -2,14 +2,18 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { 
   Play, Pause, Volume2, Heart, Globe,  
   Radio, Music, 
+  Settings, HelpCircle, Share2, LogIn, LogOut,
   Expand, Minimize,
-  WifiOff, AlertCircle, X, Search, ArrowRight
+  WifiOff, AlertCircle, X, Search, ArrowRight,
+  ExternalLink, Grid2X2, Grid3X3, LayoutGrid, MapPin
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import axios from "axios";
 import Hls from "hls.js";
 import { cn } from "./lib/utils";
 import { RadioStation, ViewType, Country } from "./types";
+import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, User, handleFirestoreError, testConnection } from "./lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot, query, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 const RADIO_MIRRORS = [
   "https://de1.api.radio-browser.info/json",
@@ -573,6 +577,9 @@ const CANONICAL_TRANSLATIONS: Record<string, string> = Object.entries(COUNTRY_TR
 const StationCard = React.memo(({ 
   station, 
   isActive, 
+  isPlaying,
+  isBuffering,
+  visualizer,
   isFavorite, 
   onPlay, 
   onToggleFavorite, 
@@ -580,6 +587,9 @@ const StationCard = React.memo(({
 }: { 
   station: RadioStation; 
   isActive: boolean; 
+  isPlaying: boolean;
+  isBuffering: boolean;
+  visualizer: boolean;
   isFavorite: boolean; 
   onPlay: (s: RadioStation) => void; 
   onToggleFavorite: (id: string, e: React.MouseEvent) => void;
@@ -588,14 +598,14 @@ const StationCard = React.memo(({
   return (
     <div 
       id={`station-${station.stationuuid}`}
-      className="group relative bg-[#1e362d]/80 border border-white/5 p-2 md:p-4 rounded-xl md:rounded-3xl flex flex-col items-center text-center cursor-pointer active:scale-95 transition-transform" 
+      className="group relative bg-[#1e362d]/80 border border-white/5 p-2 md:p-4 rounded-sm flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform aspect-square" 
       onClick={() => onPlay(station)}
     >
       {isActive && (
         <div className="absolute inset-0 border-2 border-[#dccba3]/40 bg-[#dccba3]/5 rounded-xl md:rounded-3xl z-10 pointer-events-none" />
       )}
       
-      <div className="relative w-12 h-12 md:w-24 md:h-24 mb-2 md:mb-4 z-20 rounded-lg md:rounded-2xl overflow-hidden bg-[#12241d] shadow-inner border border-white/5 flex-shrink-0">
+      <div className="relative w-12 h-12 md:w-20 md:h-20 mb-2 md:mb-3 z-20 rounded-lg md:rounded-2xl overflow-hidden bg-[#12241d] shadow-inner border border-white/5 flex-shrink-0">
         {station.favicon ? (
           <img 
             src={station.favicon} 
@@ -614,20 +624,35 @@ const StationCard = React.memo(({
         </div>
       </div>
 
-      <div className="w-full min-w-0 z-20 text-center overflow-hidden">
-        <h3 className="font-bold text-white truncate text-[10px] md:text-base mb-0.5 md:mb-1">{station.name}</h3>
-        <div className="text-[8px] md:text-xs text-[#e3d5b8]/30 flex items-center justify-center gap-1">
-          <span className="truncate">{translateCountry(station.country)}</span>
-          <img src={`https://flagcdn.com/w20/${(station.countrycode || "il").toLowerCase()}.png`} className="w-3 h-2 rounded-sm opacity-30 flex-shrink-0" alt="" />
+      <div className="w-full min-w-0 z-20 text-center overflow-hidden h-10 md:h-14 flex flex-col justify-center">
+        <h3 className="font-bold text-white truncate text-[10px] md:text-sm mb-0.5 md:mb-1 px-2">{station.name}</h3>
+        <div className="text-[8px] md:text-xs text-[#e3d5b8]/30 flex items-center justify-center gap-1 min-h-[12px] md:min-h-[16px]">
+          {isActive && isPlaying && !isBuffering && visualizer ? (
+            <div className="flex items-end gap-0.5 h-2 md:h-3">
+              {[...Array(4)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ height: ["30%", "100%", "40%", "90%", "30%"] }}
+                  transition={{ repeat: Infinity, duration: 0.4 + i * 0.1, ease: "easeInOut" }}
+                  className="w-0.5 bg-[#dccba3] rounded-full"
+                />
+              ))}
+            </div>
+          ) : (
+            <>
+              <span className="truncate">{translateCountry(station.country)}</span>
+              <img src={`https://flagcdn.com/w20/${(station.countrycode || "il").toLowerCase()}.png`} className="w-3 h-2 rounded-sm opacity-30 flex-shrink-0" alt="" />
+            </>
+          )}
         </div>
       </div>
 
-      <div className="absolute top-1 right-1 md:top-3 md:right-3 z-30">
+      <div className="absolute top-1 right-1 md:top-2 md:right-2 z-30">
         <button 
           onClick={(e) => onToggleFavorite(station.stationuuid, e)} 
-          className={cn("p-1 md:p-2 rounded-full", isFavorite ? "text-[#ff6b6b]" : "text-white/10 hover:text-white/40")}
+          className={cn("p-1 md:p-1.5 rounded-full", isFavorite ? "text-[#ff6b6b]" : "text-white/10 hover:text-white/40")}
         >
-          <Heart size={14} className="md:w-5 md:h-5" fill={isFavorite ? "currentColor" : "none"} />
+          <Heart size={12} className="md:w-4 md:h-4" fill={isFavorite ? "currentColor" : "none"} />
         </button>
       </div>
     </div>
@@ -647,6 +672,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [countrySearchQuery, setCountrySearchQuery] = useState("");
   const [tagSearchQuery, setTagSearchQuery] = useState("");
   const [useStreamProxy, setUseStreamProxy] = useState(false);
@@ -654,6 +680,21 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: "error" | "info" } | null>(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+  const [isAppLoaded, setIsAppLoaded] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [gridCols, setGridCols] = useState<number>(3);
+  const [playedFromView, setPlayedFromView] = useState<ViewType | null>(null);
+  const [playedFromCountry, setPlayedFromCountry] = useState<string | null>(null);
+  const [quality, setQuality] = useState<"high" | "low">("high");
+  const [theme, setTheme] = useState<"dark" | "high-contrast">("dark");
+  const [visualizer, setVisualizer] = useState(true);
+  const [saveConsent, setSaveConsent] = useState(true);
+  const [visibleCount, setVisibleCount] = useState(60);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Refs
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -662,6 +703,87 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+
+  // Test Firebase connection
+  useEffect(() => {
+    testConnection();
+  }, []);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Splash Timer
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+      setIsAppLoaded(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Sync Favorites & Settings with Firestore
+  useEffect(() => {
+    if (!user) {
+      // Load from local storage for guests
+      const savedFavs = localStorage.getItem("radioprime_favorites");
+      if (savedFavs) setFavorites(JSON.parse(savedFavs));
+      const savedCols = localStorage.getItem("radioprime_grid_cols");
+      if (savedCols) setGridCols(parseInt(savedCols));
+      const savedCountry = localStorage.getItem("radioprime_user_country");
+      if (savedCountry) setUserCountry(savedCountry);
+      return;
+    }
+
+    // Sync Settings
+    const userDocRef = doc(db, 'users', user.uid);
+    const unsubUser = onSnapshot(userDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.gridCols) {
+          setGridCols(data.gridCols);
+          localStorage.setItem("radioprime_grid_cols", data.gridCols.toString());
+        }
+        if (data.quality) setQuality(data.quality);
+        if (data.theme) setTheme(data.theme);
+        if (data.visualizer !== undefined) setVisualizer(data.visualizer);
+        if (data.userCountry) {
+          setUserCountry(data.userCountry);
+          localStorage.setItem("radioprime_user_country", data.userCountry);
+        }
+      } else {
+        // Initial set for new user from local storage
+        const savedCols = localStorage.getItem("radioprime_grid_cols") || "3";
+        const savedCountry = localStorage.getItem("radioprime_user_country");
+        setDoc(userDocRef, {
+          gridCols: parseInt(savedCols),
+          quality: "high",
+          theme: "dark",
+          visualizer: true,
+          userCountry: savedCountry || null,
+          updatedAt: serverTimestamp()
+        });
+      }
+    });
+
+    // Sync Favorites
+    const favsRef = collection(db, 'users', user.uid, 'favorites');
+    const unsubFavs = onSnapshot(favsRef, (querySnap) => {
+      const favIds = querySnap.docs.map(d => d.data().stationId);
+      setFavorites(favIds);
+      localStorage.setItem("radioprime_favorites", JSON.stringify(favIds));
+    });
+
+    return () => {
+      unsubUser();
+      unsubFavs();
+    };
+  }, [user]);
 
   // Fullscreen state listener
   useEffect(() => {
@@ -701,7 +823,34 @@ export default function App() {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
+    setVisibleCount(60);
   }, [view, selectedCountry]);
+
+  // Reset lazy load on new stations
+  useEffect(() => {
+    setVisibleCount(60);
+  }, [stations]);
+
+  // Infinite scroll logic components
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    if (scrollHeight - scrollTop - clientHeight < 800) {
+      setVisibleCount(prev => Math.min(prev + 60, stations.length));
+    }
+  }, [stations.length]);
+
+  useEffect(() => {
+    const scrollElem = scrollRef.current;
+    if (scrollElem) {
+      scrollElem.addEventListener("scroll", handleScroll, { passive: true });
+    }
+    return () => {
+      if (scrollElem) {
+        scrollElem.removeEventListener("scroll", handleScroll);
+      }
+    };
+  }, [handleScroll]);
 
   const translateCountry = useCallback((name: string) => {
     if (!name) return "";
@@ -742,48 +891,74 @@ export default function App() {
       
       if (type === "search" || searchQuery) {
         endpoint = `/stations/search`;
-        queryParams = { name: searchQuery, limit: 500, ...extraParams };
+        queryParams = { name: searchQuery, limit: 100000, ...extraParams };
       } else if (type === "favorites") {
         setLoading(false);
         return;
       } else if (countryToFetch) {
         endpoint = `/stations/bycountry/${countryToFetch}`;
-        queryParams = { order: "clickcount", reverse: "true", limit: 1000, ...extraParams };
+        queryParams = { order: "clickcount", reverse: "true", limit: 100000, ...extraParams };
       }
 
       // Try local proxy first
       try {
-        const response = await axios.get(`${API_BASE}${endpoint}`, { 
+        const url = `${API_BASE}${endpoint}`;
+        const response = await axios.get(url, { 
           params: queryParams,
           signal: abortControllerRef.current.signal 
         });
         
-        setStations(response.data.filter((station: RadioStation, index: number, self: RadioStation[]) =>
-          index === self.findIndex((s) => s.stationuuid === station.stationuuid)
-        ));
+        const uniqueStations: RadioStation[] = [];
+        const seenIds = new Set<string>();
+        for (const station of response.data) {
+          if (station.stationuuid && !seenIds.has(station.stationuuid)) {
+            seenIds.add(station.stationuuid);
+            uniqueStations.push(station);
+          }
+        }
+        setStations(uniqueStations);
       } catch (proxyError) {
         if (axios.isCancel(proxyError)) return;
+        console.error("Proxy Load Error:", {
+          url: `${API_BASE}${endpoint}`,
+          params: queryParams,
+          error: proxyError
+        });
         console.warn("Proxy failed, trying direct mirror...");
         
         // Fallback to mirrors
         let success = false;
         for (const mirror of RADIO_MIRRORS) {
           try {
-            const response = await axios.get(`${mirror}${endpoint}`, { 
+            const mirrorUrl = `${mirror}${endpoint}`;
+            const response = await axios.get(mirrorUrl, { 
               params: queryParams,
               signal: abortControllerRef.current.signal 
             });
-            setStations(response.data.filter((station: RadioStation, index: number, self: RadioStation[]) =>
-              index === self.findIndex((s) => s.stationuuid === station.stationuuid)
-            ));
+            const uniqueStations: RadioStation[] = [];
+            const seenIds = new Set<string>();
+            for (const station of response.data) {
+              if (station.stationuuid && !seenIds.has(station.stationuuid)) {
+                seenIds.add(station.stationuuid);
+                uniqueStations.push(station);
+              }
+            }
+            setStations(uniqueStations);
             success = true;
             break;
           } catch (mirrorError) {
-            console.error(`Mirror ${mirror} failed`, mirrorError);
+            console.error(`Mirror Load Error (${mirror}):`, {
+              url: `${mirror}${endpoint}`,
+              params: queryParams,
+              error: mirrorError
+            });
           }
         }
         
-        if (!success) throw proxyError;
+        if (!success) {
+          console.error("All load attempts failed (Proxy + Mirrors)");
+          throw proxyError;
+        }
       }
 
       if (stations.length === 0 && (type === "search" || searchQuery)) {
@@ -807,17 +982,23 @@ export default function App() {
     try {
       // Try proxy first
       try {
-        const response = await axios.get(`${API_BASE}/countries`);
+        const url = `${API_BASE}/countries`;
+        const response = await axios.get(url);
         if (Array.isArray(response.data)) {
           const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
           setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
-        } else throw new Error("Invalid response");
+        } else throw new Error("Invalid response format");
       } catch (proxyError) {
+        console.error("Proxy Countries Load Error:", {
+          url: `${API_BASE}/countries`,
+          error: proxyError
+        });
         console.warn("Proxy countries fetch failed, trying direct mirror...");
         let success = false;
         for (const mirror of RADIO_MIRRORS) {
           try {
-            const response = await axios.get(`${mirror}/countries`);
+            const mirrorUrl = `${mirror}/countries`;
+            const response = await axios.get(mirrorUrl);
             if (Array.isArray(response.data)) {
               const validCountries = response.data.filter((c: any) => c.iso_3166_1 && c.stationcount > 0);
               setCountries(validCountries.sort((a: any, b: any) => b.stationcount - a.stationcount));
@@ -825,10 +1006,16 @@ export default function App() {
               break;
             }
           } catch (mirrorError) {
-            console.error(`Mirror ${mirror} failed for countries`, mirrorError);
+            console.error(`Mirror Countries Load Error (${mirror}):`, {
+              url: `${mirror}/countries`,
+              error: mirrorError
+            });
           }
         }
-        if (!success) throw proxyError;
+        if (!success) {
+          console.error("All countries load attempts failed");
+          throw proxyError;
+        }
       }
     } catch (error) {
       console.error("Failed to fetch countries", error);
@@ -855,29 +1042,143 @@ export default function App() {
     };
   }, [showNotification]);
 
-  // Load Favorites
+  // Save Settings
   useEffect(() => {
-    const saved = localStorage.getItem("radioprime_favorites");
-    if (saved) setFavorites(JSON.parse(saved));
-  }, []);
+    if (!saveConsent) return;
+    
+    if (!user) {
+      localStorage.setItem("radioprime_grid_cols", gridCols.toString());
+      localStorage.setItem("radioprime_quality", quality);
+      localStorage.setItem("radioprime_theme", theme);
+      localStorage.setItem("radioprime_visualizer", visualizer.toString());
+      if (userCountry) localStorage.setItem("radioprime_user_country", userCountry);
+      else localStorage.removeItem("radioprime_user_country");
+    } else {
+      const userDocRef = doc(db, 'users', user.uid);
+      updateDoc(userDocRef, { 
+        gridCols, 
+        quality, 
+        theme, 
+        visualizer, 
+        userCountry,
+        updatedAt: serverTimestamp() 
+      }).catch(e => {
+        if (e.code === 'not-found') {
+          setDoc(userDocRef, { 
+            gridCols, 
+            quality, 
+            theme, 
+            visualizer, 
+            userCountry,
+            updatedAt: serverTimestamp() 
+          });
+        }
+      });
+    }
+  }, [gridCols, quality, theme, visualizer, userCountry, user, saveConsent]);
 
-  // Save Favorites
+  // Load Settings from Local Storage for Guests
+  useEffect(() => {
+    if (!user) {
+      const savedCols = localStorage.getItem("radioprime_grid_cols");
+      if (savedCols) setGridCols(parseInt(savedCols));
+      const savedQuality = localStorage.getItem("radioprime_quality");
+      if (savedQuality) setQuality(savedQuality as any);
+      const savedTheme = localStorage.getItem("radioprime_theme");
+      if (savedTheme) setTheme(savedTheme as any);
+      const savedVis = localStorage.getItem("radioprime_visualizer");
+      if (savedVis) setVisualizer(savedVis === "true");
+    }
+  }, [user]);
+
+  // Load Favorites - Handled by Firebase Sync effect now, keeping only for guest
+  useEffect(() => {
+    if (!user) {
+      const saved = localStorage.getItem("radioprime_favorites");
+      if (saved) setFavorites(JSON.parse(saved));
+    }
+  }, [user]);
+
+  // Save Favorites locally - Handled by Firebase sync mostly, but keep for consistency
   useEffect(() => {
     localStorage.setItem("radioprime_favorites", JSON.stringify(favorites));
   }, [favorites]);
 
   // Fetch Initial Data
   useEffect(() => {
-    fetchStations("popular");
+    const savedCountry = localStorage.getItem("radioprime_user_country");
+    if (savedCountry) {
+      setUserCountry(savedCountry);
+      setSelectedCountry(savedCountry);
+      setView("stations");
+      fetchStations("stations", { country: savedCountry });
+    } else {
+      fetchStations("popular");
+    }
     fetchCountries();
   }, [fetchStations, fetchCountries]);
 
-  const toggleFavorite = useCallback((id: string, e: React.MouseEvent) => {
+  const toggleFavorite = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const isFav = favorites.includes(id);
+    
+    // Optimistic UI
     setFavorites(prev => 
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
+      isFav ? prev.filter(f => f !== id) : [...prev, id]
     );
-  }, []);
+
+    if (user) {
+      try {
+        const favDocRef = doc(db, 'users', user.uid, 'favorites', id);
+        if (isFav) {
+          await deleteDoc(favDocRef);
+        } else {
+          await setDoc(favDocRef, {
+            stationId: id,
+            createdAt: serverTimestamp()
+          });
+        }
+      } catch (err) {
+        handleFirestoreError(err, isFav ? 'delete' : 'create', `favorites/${id}`);
+        showNotification("שגיאה בסנכרון מועדפים", "error");
+      }
+    }
+  }, [favorites, user, showNotification]);
+
+  const login = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      showNotification("התחברת בהצלחה", "info");
+      setIsSettingsOpen(false);
+    } catch (err: any) {
+      console.error(err);
+      showNotification("שגיאה בהתחברות", "error");
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      showNotification("התנתקת בהצלחה", "info");
+      setIsSettingsOpen(false);
+      setFavorites([]); // Clear local state, will sync back if persistent
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: 'RadioPrime - רדיו בסטייל',
+        text: 'בואו להאזין לרדיו מכל העולם!',
+        url: window.location.href,
+      }).catch(console.error);
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      showNotification("הקישור הועתק ללוח", "info");
+    }
+  };
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -911,6 +1212,8 @@ export default function App() {
 
   const playStation = useCallback(async (station: RadioStation, retryCount = 0) => {
     setCurrentStation(station);
+    setPlayedFromView(view);
+    setPlayedFromCountry(selectedCountry);
     const useProxy = retryCount > 0;
     setUseStreamProxy(useProxy);
     setIsBuffering(true);
@@ -1027,12 +1330,21 @@ export default function App() {
       Promise.all(urlPromises)
         .then(results => {
           const rawStations = results.map(r => r.data[0]).filter(Boolean);
-          const uniqueStations = rawStations.filter((station: RadioStation, index: number, self: RadioStation[]) =>
-            index === self.findIndex((s) => s.stationuuid === station.stationuuid)
-          );
+          const uniqueStations: RadioStation[] = [];
+          const seenIds = new Set<string>();
+          for (const station of rawStations) {
+            if (station.stationuuid && !seenIds.has(station.stationuuid)) {
+              seenIds.add(station.stationuuid);
+              uniqueStations.push(station);
+            }
+          }
           setStations(uniqueStations);
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error("Favorites Load Error:", {
+            favoriteIds: favorites,
+            error: err
+          });
           showNotification("שגיאה בטעינת המועדפים", "error");
         })
         .finally(() => {
@@ -1066,7 +1378,10 @@ export default function App() {
   }, [allGenres, tagSearchQuery]);
 
   return (
-    <div dir="rtl" className="h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col relative">
+    <div dir="rtl" className={cn(
+      "h-screen bg-[#12241d] text-[#e3d5b8] font-sans selection:bg-[#dccba3] selection:text-black overflow-hidden flex flex-col relative transition-[filter,background-color] duration-500",
+      theme === "high-contrast" ? "brightness-125 contrast-125" : ""
+    )}>
         <AnimatePresence>
           {isOffline && (
             <motion.div 
@@ -1103,7 +1418,10 @@ export default function App() {
 
       <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/80 backdrop-blur-xl z-[60] sticky top-0 transition-all">
         <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right"><h1 className="text-xl font-bold tracking-tight text-[#e3d5b8] uppercase italic">רדיו<span className="text-[#dccba3]">פריים</span></h1></div>
+          <div className="text-right flex items-center gap-2">
+            <div className="w-1 h-6 bg-[#dccba3] rounded-full" />
+            <h1 className="text-xl font-bold tracking-tight text-[#e3d5b8] uppercase italic">רדיו<span className="text-[#dccba3]">פריים</span></h1>
+          </div>
         </div>
 
         <div className="flex-1 max-w-sm mx-4 relative">
@@ -1121,9 +1439,11 @@ export default function App() {
               } else {
                 setSearchQuery(q);
                 if (q.trim().length > 0) {
+                  setSelectedGenre(null);
                   setView("search");
                   fetchStations("search");
                 } else if (view === "search") {
+                  setSelectedGenre(null);
                   setView("popular");
                   fetchStations("popular");
                 }
@@ -1134,7 +1454,9 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <button onClick={toggleFullscreen} className="p-2 hover:bg-white/5 rounded-full transition-all text-[#e3d5b8]/40 hover:text-white">{isFullscreen ? <Minimize size={20} /> : <Expand size={20} />}</button>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 hover:bg-white/10 rounded-xl transition-all text-[#dccba3] border border-white/5 bg-white/5 shadow-lg group">
+            <Settings size={20} className="group-hover:rotate-90 transition-transform duration-300" />
+          </button>
         </div>
       </header>
 
@@ -1142,18 +1464,37 @@ export default function App() {
         <main ref={scrollRef} className="flex-1 overflow-y-auto py-4 md:py-10 custom-scrollbar relative px-0">
           <div className="w-full space-y-8 md:space-y-12 pb-36">
             <section>
-              <div className="flex items-center justify-between mb-8 px-4 md:px-10">
-                <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-[#e3d5b8] flex items-center gap-4">
-                  <div className="w-1.5 h-10 bg-gradient-to-b from-[#dccba3] to-[#b3a478] rounded-full shadow-[0_0_15px_rgba(220,203,163,0.3)]" />
-                  {view === "favorites" ? "הפלייליסט שלי" : view === "countries" ? "מפה עולמית" : view === "genres" ? "קטגוריות" : (selectedCountry && view === "stations") ? `רדיו ${translateCountry(selectedCountry)}` : "תוצאות חיפוש"}
-                  <span className="text-sm font-medium text-[#dccba3]/40 mr-2">
-                    {view === "countries" ? `(${countries.length})` : view === "genres" ? `(${allGenres.length})` : 
-                     view === "favorites" ? `(${favorites.length})` : `(${stations.length})`}
-                  </span>
-                </h2>
-                <div className="flex gap-2">
-                  {(view === "stations" || view === "search") ? (
-                  <button onClick={() => { if (view === "stations") setSelectedCountry(null); setView(previousView); }} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all text-white/50"><ArrowRight size={20} /></button>
+              <div className="flex items-center justify-between mb-8 px-4">
+                <div className="flex items-start gap-3 md:gap-4 flex-1">
+                  <div className="w-1.5 h-8 md:h-10 bg-gradient-to-b from-[#dccba3] to-[#b3a478] rounded-full shadow-[0_0_15px_rgba(220,203,163,0.3)] shrink-0 mt-1 md:mt-0" />
+                  <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3 flex-1">
+                    <h2 className="text-2xl md:text-4xl font-bold tracking-tight text-[#e3d5b8] leading-tight md:leading-normal">
+                      {view === "favorites" ? "הפלייליסט שלי" : 
+                       view === "countries" ? "מפה עולמית" : 
+                       view === "genres" ? "קטגוריות" : 
+                       (selectedCountry && view === "stations") ? `רדיו ${translateCountry(selectedCountry)}` : 
+                       (selectedGenre && (view === "search" || view === "stations") && !searchQuery) ? `רדיו ${selectedGenre}` :
+                       view === "search" && searchQuery ? "תוצאות חיפוש" : "הצעות בשבילך"}
+                    </h2>
+                    <span className="text-sm md:text-base font-medium text-[#dccba3]/40 shrink-0">
+                      {view === "countries" ? `(${countries.length})` : view === "genres" ? `(${allGenres.length})` : 
+                       view === "favorites" ? `(${favorites.length})` : `(${stations.length})`}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {(view === "stations" || view === "search" || view === "favorites" || view === "countries" || view === "genres") ? (
+                  <button onClick={() => { 
+                    const targetView = view === "stations" ? "countries" : "popular";
+                    setSelectedCountry(null); 
+                    setSelectedGenre(null);
+                    setSearchQuery("");
+                    setView(targetView); 
+                    fetchStations(targetView);
+                  }} className="flex items-center gap-2 py-2 px-4 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5 transition-all text-[#dccba3] font-bold text-sm group">
+                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /> 
+                    <span>חזרה</span>
+                  </button>
                 ) : <div />}
                 </div>
               </div>
@@ -1161,9 +1502,15 @@ export default function App() {
               {/* Country search bar removed as requested */}
 
               {loading ? (
-                <div className="grid grid-cols-3 gap-1 md:gap-4 w-full px-4 md:px-10">
-                  {[...Array(18)].map((_, i) => (
-                    <div key={i} className="aspect-square bg-white/[0.02] rounded-2xl border border-white/5 animate-pulse" />
+                <div className={cn(
+                  "grid gap-0 w-full",
+                  gridCols === 2 ? "grid-cols-2" : 
+                  gridCols === 4 ? "grid-cols-4" : 
+                  gridCols === 5 ? "grid-cols-5" : 
+                  "grid-cols-3"
+                )}>
+                  {[...Array(150)].map((_, i) => (
+                    <div key={i} className="aspect-square bg-white/[0.02] border border-white/5 animate-pulse" />
                   ))}
                 </div>
               ) : (
@@ -1176,7 +1523,13 @@ export default function App() {
                     transition={{ duration: 0.2 }}
                   >
                   {view === "genres" ? (
-                    <div className="grid grid-cols-3 gap-1 md:gap-4 w-full">
+                    <div className={cn(
+                      "grid gap-0 w-full",
+                      gridCols === 2 ? "grid-cols-2" : 
+                      gridCols === 4 ? "grid-cols-4" : 
+                      gridCols === 5 ? "grid-cols-5" : 
+                      "grid-cols-3"
+                    )}>
                       {filteredGenres.map((genre) => (
                         <motion.button 
                           key={genre} 
@@ -1197,6 +1550,7 @@ export default function App() {
                               "טבע": "Nature", "חדשות עולם": "World News", "כלכלה": "Economy", "שירי ארץ ישראל": "Hebrew"
                             }; 
                             const q = mapping[genre] || genre; 
+                            setSelectedGenre(genre);
                             setSearchQuery(""); 
                             setTagSearchQuery("");
                             setPreviousView("genres");
@@ -1204,7 +1558,7 @@ export default function App() {
                             fetchStations("search", { tag: q.toLowerCase() }); 
                           }} 
                           className={cn(
-                            "group relative h-28 rounded-2xl flex flex-col items-center justify-center p-0 overflow-hidden hover:bg-white/10 active:scale-95 border border-white/5 transition-all bg-gradient-to-br",
+                            "group relative h-28 rounded-sm flex flex-col items-center justify-center p-0 overflow-hidden hover:bg-white/10 active:scale-95 border border-white/5 transition-all bg-gradient-to-br",
                             getGenreGradient(genre)
                           )}
                         >
@@ -1217,7 +1571,13 @@ export default function App() {
                       ))}
                     </div>
                   ) : view === "countries" ? (
-                    <div className="grid grid-cols-3 gap-1 md:gap-4 w-full">
+                    <div className={cn(
+                      "grid gap-0 w-full",
+                      gridCols === 2 ? "grid-cols-2" : 
+                      gridCols === 4 ? "grid-cols-4" : 
+                      gridCols === 5 ? "grid-cols-5" : 
+                      "grid-cols-3"
+                    )}>
                       {filteredCountries.map((country) => (
                         <motion.button 
                           key={country.iso_3166_1} 
@@ -1228,7 +1588,7 @@ export default function App() {
                             fetchStations("stations", { country: country.name }); 
                             setCountrySearchQuery(""); 
                           }} 
-                          className="group relative h-24 bg-[#162a22]/40 border border-white/5 hover:border-[#dccba3]/50 rounded-2xl flex flex-col items-center justify-center p-3 hover:bg-[#162a22]/60 active:scale-95"
+                          className="group relative h-24 bg-[#162a22]/40 border border-white/5 hover:border-[#dccba3]/50 rounded-sm flex flex-col items-center justify-center p-3 hover:bg-[#162a22]/60 active:scale-95"
                         >
                           <div className="relative mb-2 w-10 h-10 overflow-hidden rounded-lg border border-white/10 group-hover:border-[#dccba3]/50 transition-all"><img src={`https://flagcdn.com/w80/${country.iso_3166_1.toLowerCase()}.png`} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="" loading="lazy" referrerPolicy="no-referrer" /></div>
                           <span className="text-[10px] md:text-xs font-bold text-white/50 text-center truncate w-full group-hover:text-white uppercase">{translateCountry(country.name)}</span>
@@ -1254,18 +1614,35 @@ export default function App() {
                       </p>
                     </motion.div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-1 md:gap-3 lg:gap-6 w-full">
-                      {stations.map((station) => (
+                    <div className={cn(
+                      "grid gap-0 w-full",
+                      gridCols === 2 ? "grid-cols-2" : 
+                      gridCols === 4 ? "grid-cols-4" : 
+                      gridCols === 5 ? "grid-cols-5" : 
+                      "grid-cols-3"
+                    )}>
+                      {stations.slice(0, visibleCount).map((station) => (
                         <StationCard 
                           key={station.stationuuid}
                           station={station}
                           isActive={currentStation?.stationuuid === station.stationuuid}
+                          isPlaying={isPlaying}
+                          isBuffering={isBuffering}
+                          visualizer={visualizer}
                           isFavorite={favorites.includes(station.stationuuid)}
                           onPlay={playStation}
                           onToggleFavorite={toggleFavorite}
                           translateCountry={translateCountry}
                         />
                       ))}
+                      {visibleCount < stations.length && loading === false && (
+                        <div className="col-span-full h-32 flex items-center justify-center">
+                          <div className="flex items-center gap-2 text-[#dccba3]/50 animate-pulse">
+                            <Music size={18} />
+                            <span>טוען רדיו נוסף...</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   </motion.div>
@@ -1277,7 +1654,7 @@ export default function App() {
       </div>
 
       <AnimatePresence>
-        <motion.footer initial={{ y: 150 }} animate={{ y: 0 }} className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#0d1613]/98 backdrop-blur-xl shadow-[0_-15px_50px_rgba(0,0,0,0.6)] border-t border-white/5 pb-safe">
+        <motion.footer initial={{ y: 150 }} animate={{ y: 0 }} className="fixed bottom-0 left-0 right-0 z-50 flex flex-col bg-[#12241d]/80 backdrop-blur-xl shadow-[0_-15px_50px_rgba(0,0,0,0.6)] border-t border-[#e3d5b8]/10 pb-safe">
           <AnimatePresence>
             {currentStation && (
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-white/5">
@@ -1287,7 +1664,41 @@ export default function App() {
                     <motion.button 
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={scrollToStation}
+                      onClick={() => {
+                        if (currentStation && playedFromView) {
+                          const isSameView = view === playedFromView;
+                          const isSameCountry = playedFromView === "stations" ? selectedCountry === playedFromCountry : true;
+                          const isAlreadyThere = isSameView && isSameCountry;
+
+                          if (!isAlreadyThere) {
+                            if (playedFromView === "stations" && playedFromCountry) {
+                              setSelectedCountry(playedFromCountry);
+                              setView("stations");
+                              fetchStations("stations", { country: playedFromCountry });
+                            } else {
+                              setView(playedFromView);
+                              if (playedFromView === "popular") {
+                                fetchStations("popular");
+                              } else if (playedFromView === "favorites") {
+                                // No action needed as favorites is usually kept in state
+                              }
+                            }
+                          }
+
+                          // Give a moment for potential view switch, or scroll immediately if already there
+                          const scrollDelay = isAlreadyThere ? 0 : 300;
+                          setTimeout(() => {
+                            const element = document.getElementById(`station-${currentStation.stationuuid}`);
+                            if (element) {
+                              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              element.classList.add('ring-2', 'ring-[#dccba3]', 'ring-offset-2', 'ring-offset-[#12241d]');
+                              setTimeout(() => {
+                                element.classList.remove('ring-2', 'ring-[#dccba3]', 'ring-offset-2', 'ring-offset-[#12241d]');
+                              }, 2000);
+                            }
+                          }, scrollDelay);
+                        }
+                      }}
                       className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 cursor-pointer"
                     >
                       {currentStation.favicon ? (
@@ -1295,9 +1706,11 @@ export default function App() {
                       ) : <div className="w-full h-full flex items-center justify-center text-white/10"><Radio size={20} /></div>}
                     </motion.button>
                     <div className="overflow-hidden text-right">
-                      <h4 className="text-sm md:text-lg font-bold text-white tracking-tight truncate leading-tight">
-                        {currentStation.name}
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm md:text-lg font-bold text-white tracking-tight truncate leading-tight">
+                          {currentStation.name}
+                        </h4>
+                      </div>
                     </div>
                   </div>
 
@@ -1315,17 +1728,28 @@ export default function App() {
                   {/* Left side: Country Info */}
                   <div className="flex items-center gap-3 overflow-hidden justify-end">
                     <div className="overflow-hidden text-right">
-                      <h4 className="text-sm md:text-lg font-bold text-white tracking-tight truncate leading-tight">
+                      <h4 className="text-xs md:text-lg font-bold text-white tracking-tight truncate leading-tight">
                         {translateCountry(currentStation.country)}
                       </h4>
                     </div>
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl overflow-hidden flex-shrink-0 border border-white/10">
+                    <motion.button 
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        if (currentStation.country) {
+                          setSelectedCountry(currentStation.country);
+                          setView("stations");
+                          fetchStations("stations", { country: currentStation.country });
+                        }
+                      }}
+                      className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 cursor-pointer"
+                    >
                       <img 
                         src={`https://flagcdn.com/w160/${(currentStation.countrycode || "il").toLowerCase()}.png`} 
                         className="w-full h-full object-cover" 
                         alt="" 
                       />
-                    </div>
+                    </motion.button>
                   </div>
                 </div>
               </motion.div>
@@ -1339,7 +1763,11 @@ export default function App() {
             ].map((item) => (
               <button 
                 key={item.id} 
-                onClick={() => { if (item.id === "countries") setSelectedCountry(null); setView(item.id as any); }} 
+                onClick={() => { 
+                  if (item.id === "countries") setSelectedCountry(null); 
+                  setSelectedGenre(null);
+                  setView(item.id as any); 
+                }} 
                 className={cn(
                   "flex flex-col items-center gap-1 active:scale-95 relative py-2 min-w-[64px]", 
                   view === item.id || (item.id === "countries" && view === "stations" && selectedCountry) ? "text-[#dccba3]" : "text-[#e3d5b8]/30 hover:text-white/60"
@@ -1354,6 +1782,320 @@ export default function App() {
             ))}
           </div>
         </motion.footer>
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div 
+            initial={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className="fixed inset-0 z-[200] bg-[#12241d] flex flex-col items-center justify-center font-sans"
+            dir="rtl"
+          >
+            <motion.div 
+              animate={{ 
+                scale: [1, 1.1, 1],
+                rotate: [0, 5, -5, 0] 
+              }} 
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="relative mb-8"
+            >
+              <div className="absolute inset-0 bg-[#dccba3]/20 blur-2xl rounded-full" />
+              <Radio size={80} className="text-[#dccba3] relative" />
+            </motion.div>
+            <h1 className="text-4xl font-bold text-[#e3d5b8] mb-2 italic">רדיו<span className="text-[#dccba3]">פריים</span></h1>
+            <p className="text-[#dccba3]/40 text-sm tracking-[0.3em] uppercase">World Wide Beats</p>
+            <div className="mt-12 w-48 h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: "0%" }}
+                animate={{ width: "100%" }}
+                transition={{ duration: 5, ease: "linear" }}
+                className="h-full bg-[#dccba3] shadow-[0_0_15px_rgba(220,203,163,0.6)]"
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[150]"
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }}
+              className="fixed inset-0 bg-[#12241d] z-[160] flex flex-col overflow-hidden"
+              dir="rtl"
+            >
+              <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/80 backdrop-blur-xl shrink-0">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold tracking-tight text-[#e3d5b8] flex items-center gap-3 italic">
+                    <Settings className="text-[#dccba3]" size={20} /> הגדרות
+                  </h2>
+                </div>
+                <button onClick={() => setIsSettingsOpen(false)} className="p-2 hover:bg-white/5 rounded-full text-white/40 transition-all hover:rotate-90"><X size={24} /></button>
+              </header>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10">
+                <div className="max-w-2xl mx-auto space-y-10">
+                  <section>
+                  <h3 className="text-xs font-bold text-[#dccba3]/40 uppercase tracking-widest mb-4">תצוגת רשת</h3>
+                  <div className="flex gap-2">
+                    {[2, 3, 4, 5].map(cols => (
+                      <button 
+                        key={cols}
+                        onClick={() => setGridCols(cols)}
+                        className={cn(
+                          "flex-1 py-3 rounded-xl border flex flex-col items-center justify-center gap-2 transition-all",
+                          gridCols === cols ? "bg-[#dccba3] border-[#dccba3] text-[#12241d]" : "bg-white/5 border-white/5 text-white/40 hover:bg-white/10"
+                        )}
+                      >
+                        {cols <= 2 ? <Grid2X2 size={18} /> : cols === 3 ? <Grid3X3 size={18} /> : <LayoutGrid size={18} />}
+                        <span className="text-[10px] font-bold">{cols} עמ'</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-xs font-bold text-[#dccba3]/40 uppercase tracking-widest mb-4">איכות וחוויה</h3>
+                  <div className="space-y-3">
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">איכות שמע</div>
+                        <div className="text-[10px] text-white/40">איכות גבוהה צורכת יותר דאטה</div>
+                      </div>
+                      <div className="flex bg-black/40 p-1 rounded-lg">
+                        <button 
+                          onClick={() => setQuality("high")}
+                          className={cn("px-3 py-1 rounded-md text-[10px] font-bold transition-all", quality === "high" ? "bg-[#dccba3] text-[#12241d]" : "text-white/40")}
+                        >HI-FI</button>
+                        <button 
+                          onClick={() => setQuality("low")}
+                          className={cn("px-3 py-1 rounded-md text-[10px] font-bold transition-all", quality === "low" ? "bg-[#dccba3] text-[#12241d]" : "text-white/40")}
+                        >LOW</button>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">אפקטים חזותיים</div>
+                        <div className="text-[10px] text-white/40">אנימציות וויזואליזציה של השמע</div>
+                      </div>
+                      <button 
+                        onClick={() => setVisualizer(!visualizer)}
+                        className={cn(
+                          "w-12 h-6 rounded-full relative transition-all duration-300",
+                          visualizer ? "bg-[#dccba3]" : "bg-white/20"
+                        )}
+                      >
+                        <motion.div 
+                          animate={{ x: visualizer ? -24 : 0 }}
+                          className="absolute right-1 top-1 w-4 h-4 bg-[#12241d] rounded-full"
+                        />
+                      </button>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">ניגודיות גבוהה</div>
+                        <div className="text-[10px] text-white/40">שיפור הקריאות של הממשק</div>
+                      </div>
+                      <button 
+                        onClick={() => setTheme(theme === "dark" ? "high-contrast" : "dark")}
+                        className={cn(
+                          "w-12 h-6 rounded-full relative transition-all duration-300",
+                          theme === "high-contrast" ? "bg-[#dccba3]" : "bg-white/20"
+                        )}
+                      >
+                        <motion.div 
+                          animate={{ x: theme === "high-contrast" ? -24 : 0 }}
+                          className="absolute right-1 top-1 w-4 h-4 bg-[#12241d] rounded-full"
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-xs font-bold text-[#dccba3]/40 uppercase tracking-widest mb-4">התאמה אישית</h3>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                    <div className="text-right mb-3">
+                      <div className="text-sm font-bold text-white">מדינת ברירת מחדל</div>
+                      <div className="text-[10px] text-[#dccba3]/40">כשתפתחו את האפליקציה, יוצגו תחנות ממדינה זו</div>
+                    </div>
+                    <div className="relative">
+                      <select 
+                        value={userCountry || ""} 
+                        onChange={(e) => {
+                          const val = e.target.value || null;
+                          setUserCountry(val);
+                          if (val) {
+                            setIsSettingsOpen(false);
+                            setSelectedCountry(val);
+                            setView("stations");
+                            fetchStations("stations", { country: val });
+                          }
+                        }}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-[#e3d5b8] focus:outline-none focus:border-[#dccba3]/50 appearance-none"
+                        dir="rtl"
+                      >
+                        <option value="">ללא (הצעות בשבילך)</option>
+                        {[...countries]
+                          .sort((a,b) => translateCountry(a.name).localeCompare(translateCountry(b.name)))
+                          .map(c => (
+                            <option key={c.name} value={c.name}>{translateCountry(c.name)} ({c.stationcount})</option>
+                          ))
+                        }
+                      </select>
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-white/20">
+                        <MapPin size={16} />
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section>
+                  {!user ? (
+                    <button 
+                      onClick={login}
+                      className="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 flex items-center justify-between group transition-all"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-[#dccba3]/10 rounded-full flex items-center justify-center text-[#dccba3]"><LogIn size={20} /></div>
+                        <div className="text-right">
+                          <div className="text-sm font-bold text-white">התחבר עם Google</div>
+                          <div className="text-[10px] text-white/40">שמור מועדפים והגדרות בענן</div>
+                        </div>
+                      </div>
+                      <ArrowRight size={16} className="text-white/20 group-hover:text-white group-hover:translate-x-1 transition-all" />
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4">
+                        <img src={user.photoURL || ""} alt="" className="w-10 h-10 rounded-full border border-white/20" />
+                        <div className="text-right flex-1 min-w-0">
+                          <div className="text-sm font-bold text-white truncate">{user.displayName}</div>
+                          <div className="text-[10px] text-white/40 truncate">{user.email}</div>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={logout}
+                        className="w-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-200 rounded-2xl p-4 flex items-center justify-center gap-2 font-bold transition-all"
+                      >
+                        <LogOut size={18} /> התנתק
+                      </button>
+                    </div>
+                  )}
+                </section>
+
+
+                <section>
+                  <h3 className="text-xs font-bold text-[#dccba3]/40 uppercase tracking-widest mb-4">פעולות נוספות</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={handleShare}
+                      className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3 text-white/60 transition-all font-bold"
+                    >
+                      <Share2 size={24} className="text-[#dccba3]" />
+                      <span className="text-xs">שיתוף</span>
+                    </button>
+                    <button 
+                      onClick={toggleFullscreen}
+                      className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3 text-white/60 transition-all font-bold"
+                    >
+                      {isFullscreen ? <Minimize size={24} className="text-[#dccba3]" /> : <Expand size={24} className="text-[#dccba3]" />}
+                      <span className="text-xs">{isFullscreen ? 'מזער' : 'מסך מלא'}</span>
+                    </button>
+                    <button 
+                      onClick={() => setIsHelpOpen(true)}
+                      className="bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl p-4 flex flex-col items-center gap-3 text-white/60 transition-all font-bold col-span-2"
+                    >
+                      <HelpCircle size={24} className="text-[#dccba3]" />
+                      <span className="text-xs">מרכז העזרה והנחיות</span>
+                    </button>
+                  </div>
+                </section>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5 text-center bg-[#12241d]/80 backdrop-blur-xl shrink-0">
+                <p className="text-[10px] text-white/20 uppercase tracking-[0.2em] mb-4">RadioPrime v2.5.0</p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isHelpOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setIsHelpOpen(false)}
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[210]"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="fixed inset-0 bg-[#12241d] z-[220] flex flex-col overflow-hidden"
+              dir="rtl"
+            >
+              <header className="h-16 border-b border-[#e3d5b8]/10 flex items-center justify-between px-6 bg-[#12241d]/80 backdrop-blur-xl shrink-0">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold tracking-tight text-[#e3d5b8] flex items-center gap-3 italic">
+                    <HelpCircle className="text-[#dccba3]" size={20} /> מרכז עזרה
+                  </h2>
+                </div>
+                <button onClick={() => setIsHelpOpen(false)} className="p-2 hover:bg-white/5 rounded-full text-white/40 transition-all hover:rotate-90"><X size={24} /></button>
+              </header>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10">
+                <div className="max-w-5xl mx-auto space-y-12 text-right">
+                <div className="space-y-4">
+                  <h3 className="text-xl font-bold text-[#dccba3]">איך משתמשים ב-RadioPrime?</h3>
+                  <p className="text-white/60 leading-relaxed">האפליקציה מאפשרת לך להאזין לאלפי תחנות רדיו מכל העולם בצורה פשוטה ומהירה. ניתן לנווט בין מדינות, קטגוריות מוזיקה או פשוט לחפש תחנה ספציפית.</p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                    <Heart className="text-[#ff6b6b] mb-3" />
+                    <h4 className="font-bold text-white mb-2">מועדפים</h4>
+                    <p className="text-xs text-white/40">לחצו על אייקון הלב בכל תחנה כדי להוסיף אותה לרשימת המועדפים האישית שלכם לגישה מהירה.</p>
+                  </div>
+                  <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                    <Grid3X3 className="text-[#dccba3] mb-3" />
+                    <h4 className="font-bold text-white mb-2">שינוי תצוגה</h4>
+                    <p className="text-xs text-white/40">בהגדרות ניתן לקבוע כמה תחנות יוצגו בשורה אחת (בין 2 ל-5) כדי להתאים את הממשק למכשיר שלכם.</p>
+                  </div>
+                  <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                    <LogIn className="text-blue-400 mb-3" />
+                    <h4 className="font-bold text-white mb-2">חשבון וסנכרון</h4>
+                    <p className="text-xs text-white/40">התחברו עם Google כדי שכל המועדפים וההגדרות שלכם יישמרו בענן ויהיו זמינים מכל מכשיר.</p>
+                  </div>
+                  <div className="bg-white/5 p-5 rounded-2xl border border-white/5">
+                    <Globe className="text-emerald-400 mb-3" />
+                    <h4 className="font-bold text-white mb-2">חיפוש עולמי</h4>
+                    <p className="text-xs text-white/40">לחצו על 'מדינות' בתחתית המסך כדי לגלות תחנות רדיו מכל פינה בעולם לפי יבשות ומדינות.</p>
+                  </div>
+                </div>
+
+                <div className="bg-[#dccba3]/10 p-6 rounded-2xl border border-[#dccba3]/20">
+                  <h4 className="font-bold text-[#dccba3] mb-2 flex items-center gap-2"><Settings size={18} /> טיפ למקצוענים</h4>
+                  <p className="text-sm text-white/70 italic">לחצו על תמונת התחנה בנגן למטה כדי לנווט ישירות למדינה ממנה היא משדרת ולגלות תחנות דומות נוספות.</p>
+                </div>
+
+                <div className="pt-4 text-center">
+                  <p className="text-xs text-white/20">כל הזכויות שמורות ל-RadioPrime &copy; 2026</p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+          </>
+        )}
       </AnimatePresence>
 
       <audio ref={audioRef} onPlay={() => { setIsPlaying(true); setIsBuffering(false); }} onPause={() => setIsPlaying(false)} onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onError={() => { if (currentStation && !useStreamProxy) playStation(currentStation, 1); else { setIsPlaying(false); setIsBuffering(false); } }} crossOrigin="anonymous" />

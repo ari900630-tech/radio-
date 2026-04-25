@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Rules ---
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      
+      function isValidUser(data) {
+        return data.size() <= 6 &&
+               (data.gridCols is number && data.gridCols >= 2 && data.gridCols <= 5) &&
+               (!data.keys().contains('quality') || data.quality in ['high', 'low']) &&
+               (!data.keys().contains('theme') || data.theme in ['dark', 'high-contrast']) &&
+               (!data.keys().contains('visualizer') || data.visualizer is bool) &&
+               data.updatedAt == request.time;
+      }
+      
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUser(incoming());
+      
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['gridCols', 'quality', 'theme', 'visualizer', 'updatedAt'])
+      );
+
+      // --- Favorites Subcollection ---
+      match /favorites/{favoriteId} {
+        allow list: if isOwner(userId) && isValidId(userId);
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId);
+        
+        function isValidFavorite(data) {
+          return data.size() == 2 &&
+                 data.stationId is string && data.stationId.size() <= 128 &&
+                 data.createdAt == request.time;
+        }
+
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId) && isValidFavorite(incoming());
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(favoriteId);
+      }
+    }
+  }
+}

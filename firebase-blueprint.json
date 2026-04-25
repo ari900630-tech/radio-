@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "gridCols": {
+          "type": "number",
+          "description": "Preferred number of columns in the grid (2, 3, 4, or 5)"
+        },
+        "quality": {
+          "type": "string",
+          "enum": ["high", "low"],
+          "description": "Audio quality setting"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["dark", "high-contrast"],
+          "description": "UI theme"
+        },
+        "visualizer": {
+          "type": "boolean",
+          "description": "Whether to show audio visualizer"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time settings were updated"
+        }
+      }
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "A favorite radio station",
+      "type": "object",
+      "properties": {
+        "stationId": {
+          "type": "string",
+          "description": "The UUID of the station"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When it was favorited"
+        }
+      },
+      "required": ["stationId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User settings and metadata"
+    },
+    "/users/{userId}/favorites/{favoriteId}": {
+      "schema": "Favorite",
+      "description": "Collection of user's favorite stations"
+    }
+  }
+}
